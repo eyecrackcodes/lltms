@@ -1,0 +1,38 @@
+/* Custom calendar styles */
+.fc {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.fc .fc-toolbar.fc-header-toolbar {
+  margin-bottom: 1.5em;
+}
+
+.fc .fc-button-primary {
+  background-color: #1976d2;
+  border-color: #1976d2;
+}
+
+.fc .fc-button-primary:hover {
+  background-color: #115293;
+  border-color: #115293;
+}
+
+.fc .fc-day-today {
+  background-color: #e3f2fd !important;
+}
+
+.fc .fc-event {
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.fc .fc-timegrid-slot {
+  height: 40px !important;
+}
+
+.fc .fc-daygrid-day {
+  min-height: 100px;
+}

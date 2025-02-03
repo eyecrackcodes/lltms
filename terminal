@@ -1,0 +1,20 @@
+mkdir final-expense-coach
+cd final-expense-coach
+npm init -y
+npm install react react-dom react-router-dom @mui/material @mui/icons-material @emotion/react @emotion/styled axios react-scripts
+npm start
+
+# Initialize git repository
+git init
+
+# Add the remote repository
+git remote add origin https://github.com/eyecrackcodes/coaching.git
+
+# Add all files
+git add .
+
+# Create initial commit
+git commit -m "Initial commit: Final Expense Coach application"
+
+# Push to main branch
+git push -u origin main 
