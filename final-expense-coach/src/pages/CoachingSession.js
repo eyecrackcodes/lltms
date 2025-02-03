@@ -215,33 +215,40 @@ function CoachingSession() {
       
       try {
         const db = getFirestore();
-        let queryConstraints = [];
-
-        // Build query based on user role
+        let baseQuery;
+        
         if (userRole === 'director' || isSuperAdmin) {
           // Directors and super admins can coach everyone
-          queryConstraints = [where('role', 'in', ['agent', 'sales_manager'])];
+          baseQuery = query(
+            collection(db, 'users'),
+            where('role', '==', 'agent'),
+            orderBy('firstName')
+          );
         } else if (userRole === 'sales_manager') {
           // Managers can only coach their agents
-          queryConstraints = [
+          baseQuery = query(
+            collection(db, 'users'),
+            where('managerId', '==', currentUser.uid),
             where('role', '==', 'agent'),
-            where('managerId', '==', currentUser.uid)
-          ];
+            orderBy('firstName')
+          );
         }
 
-        const agentsQuery = query(
-          collection(db, 'users'),
-          ...queryConstraints,
-          orderBy('firstName')
-        );
+        if (!baseQuery) {
+          setError('Invalid user role');
+          return;
+        }
 
-        const snapshot = await getDocs(agentsQuery);
+        console.log('Current user role:', userRole); // Debug log
+        console.log('Query constraints:', baseQuery); // Debug log
+        
+        const snapshot = await getDocs(baseQuery);
         const agentsData = snapshot.docs.map(doc => {
           const data = doc.data();
           return {
             id: doc.id,
             ...data,
-            fullName: `${data.firstName} ${data.lastName} (${data.role})`
+            fullName: `${data.firstName} ${data.lastName}`
           };
         });
 
@@ -249,14 +256,14 @@ function CoachingSession() {
         setAgents(agentsData);
       } catch (error) {
         console.error('Error fetching agents:', error);
-        setError('Failed to load agents');
+        setError('Failed to load agents: ' + error.message);
       } finally {
         setLoading(false);
       }
     };
 
-    // Only fetch if we have a user and a role
     if (currentUser && userRole) {
+      console.log('Fetching agents for user:', currentUser.email, 'role:', userRole); // Debug log
       fetchAgents();
     }
   }, [currentUser, userRole, isSuperAdmin]);

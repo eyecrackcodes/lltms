@@ -10,67 +10,115 @@ service cloud.firestore {
       return request.auth.token.email == 'anthony@luminarylife.com';
     }
     
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function hasUserProfile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    
     function isDirector() {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director';
+      return isSignedIn() && hasUserProfile() && getUserData().role == 'director';
     }
     
     function isManager() {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'sales_manager';
+      return isSignedIn() && hasUserProfile() && getUserData().role == 'sales_manager';
     }
 
     function isAdmin() {
-      return isSuperAdmin() || isDirector() || isManager();
+      return isSignedIn() && (
+        isSuperAdmin() || 
+        (hasUserProfile() && getUserData().role == 'admin')
+      );
+    }
+
+    function canCreateUsers() {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        isAdmin() ||
+        isDirector() ||
+        isManager()
+      );
+    }
+
+    function canCreateAgentsOnly() {
+      return isManager() && request.resource.data.role == 'agent';
     }
 
     function isAgent() {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'agent';
+      return isSignedIn() && hasUserProfile() && getUserData().role == 'agent';
+    }
+
+    function isAttendee(attendees) {
+      return request.auth.uid in attendees;
     }
 
     // Users Collection
     match /users/{userId} {
+      // Allow read for all authenticated users
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && (
-        isAdmin() ||
-        (userId == request.auth.uid && 
-         request.resource.data.role == 'agent')
-      );
-      allow update: if isSignedIn() && (
-        isAdmin() ||
-        userId == request.auth.uid
-      );
-      allow delete: if isSuperAdmin();
+      
+      // Allow initial user document creation
+      allow create: if 
+        isSignedIn() && (
+          // Allow users to create their own initial document
+          (request.auth.uid == userId) ||
+          // Or allow admins/managers to create users
+          isSuperAdmin() ||
+          (hasUserProfile() && (
+            getUserData().role == 'admin' ||
+            getUserData().role == 'director' ||
+            (getUserData().role == 'sales_manager' && request.resource.data.role == 'agent')
+          ))
+        ) && 
+        // Validate user document structure
+        request.resource.data.keys().hasAll(['email', 'role', 'firstName', 'lastName', 'uid']) &&
+        request.resource.data.uid == userId;
+      
+      // Allow updates based on role hierarchy
+      allow update: if 
+        isSignedIn() && (
+          isSuperAdmin() ||
+          (hasUserProfile() && (
+            getUserData().role == 'admin' ||
+            getUserData().role == 'director' ||
+            (getUserData().role == 'sales_manager' && (resource.data.role == 'agent' || request.resource.data.role == 'agent')) ||
+            (request.auth.uid == userId && request.resource.data.role == resource.data.role)
+          ))
+        );
+      
+      // Allow deletion only for superadmin and admin
+      allow delete: if isSignedIn() && (isSuperAdmin() || (hasUserProfile() && getUserData().role == 'admin'));
     }
 
     // Training Modules Collection
     match /trainingModules/{moduleId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isAdmin();
-      allow delete: if isSuperAdmin();
+      allow create, update: if isSignedIn() && (isAdmin() || isDirector());
+      allow delete: if isSignedIn() && (isSuperAdmin() || isAdmin());
     }
 
     // Module Assignments Collection
     match /moduleAssignments/{assignmentId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isAdmin();
+      allow create: if isSignedIn() && (isAdmin() || isDirector() || isManager());
       allow update: if isSignedIn() && (
         isAdmin() ||
-        request.auth.uid == resource.data.agentId
+        isDirector() ||
+        isManager() ||
+        request.auth.uid == resource.data.userId
       );
-      allow delete: if isAdmin();
+      allow delete: if isSignedIn() && (isAdmin() || isDirector());
     }
 
     // Call Grades Collection
     match /callGrades/{gradeId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isAdmin();
+      allow create: if isSignedIn() && (isAdmin() || isDirector() || isManager());
       allow update, delete: if isSignedIn() && (
         isAdmin() ||
+        isDirector() ||
         resource.data.graderId == request.auth.uid
       );
     }
@@ -78,38 +126,27 @@ service cloud.firestore {
     // Metrics Collection
     match /metrics/{metricId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && isAdmin();
-    }
-
-    // Agents Collection
-    match /agents/{agentId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && (
-        isAdmin() ||
-        (isManager() && resource.data.location == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.location)
-      );
+      allow write: if isSignedIn() && (isAdmin() || isDirector());
     }
 
     // Coaching Sessions Collection
     match /coachingSessions/{sessionId} {
       allow read: if isSignedIn() && (
         isAdmin() || 
-        request.auth.uid == resource.data.managerId ||
-        request.auth.uid == resource.data.agentId
+        isDirector() ||
+        isManager() || 
+        (isAgent() && resource.data.agentId == request.auth.uid)
       );
       
       allow create: if isSignedIn() && (
         isAdmin() || 
+        isDirector() ||
         request.auth.uid == request.resource.data.managerId
       );
       
-      allow update: if isSignedIn() && (
+      allow update, delete: if isSignedIn() && (
         isAdmin() || 
-        request.auth.uid == resource.data.managerId
-      );
-      
-      allow delete: if isSignedIn() && (
-        isAdmin() || 
+        isDirector() ||
         request.auth.uid == resource.data.managerId
       );
     }
@@ -118,35 +155,28 @@ service cloud.firestore {
     match /calendarEvents/{eventId} {
       allow read: if isSignedIn() && (
         isAdmin() || 
-        request.auth.uid in resource.data.attendees[].id
+        isDirector() ||
+        request.auth.uid in resource.data.attendees
       );
       
-      allow create: if isSignedIn() && (
+      allow create, update, delete: if isSignedIn() && (
         isAdmin() || 
+        isDirector() ||
         request.auth.uid == request.resource.data.managerId
-      );
-      
-      allow update: if isSignedIn() && (
-        isAdmin() || 
-        request.auth.uid == resource.data.managerId
-      );
-      
-      allow delete: if isSignedIn() && (
-        isAdmin() || 
-        request.auth.uid == resource.data.managerId
       );
     }
 
     // Legacy Collections (maintained for backwards compatibility)
     match /training_assignments/{assignmentId} {
       allow read: if isSignedIn();
-      allow write, delete: if isSuperAdmin();
+      allow write, delete: if isSuperAdmin() || isAdmin();
     }
 
     match /trainings/{trainingId} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && (
         isSuperAdmin() ||
+        isAdmin() ||
         isDirector()
       );
     }

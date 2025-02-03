@@ -236,51 +236,21 @@ const sections = [
   },
 ];
 
-// Initialize all sections with their includeInGrading property
-const initialSections = {
-  intake: {
+// Fix the initialSections structure to match the sections array
+const initialSections = sections.reduce((acc, section) => {
+  acc[section.title.toLowerCase().split(' ')[0]] = {
     includeInGrading: false,
-    criteria: {
-      nameSpelling: { score: 0, points: 2 },
-      email: { score: 0, points: 2 },
-      homeAddress: { score: 0, points: 2 },
-      npnRead: { score: 0, points: 2 },
-      pictureText: { score: 0, points: 2 },
-    },
-  },
-  eligibility: {
-    includeInGrading: false,
-    criteria: {
-      firstFewMinutes: { score: 0, points: 3 },
-      birthDate: { score: 0, points: 4 },
-      recentDeath: { score: 0, points: 3 },
-    },
-  },
-  situation: {
-    includeInGrading: false,
-    criteria: {
-      // ... add situation criteria
-    },
-  },
-  credibility: {
-    includeInGrading: false,
-    criteria: {
-      // ... add credibility criteria
-    },
-  },
-  luminaryIndex: {
-    includeInGrading: false,
-    criteria: {
-      // ... add luminaryIndex criteria
-    },
-  },
-  underwriting: {
-    includeInGrading: false,
-    criteria: {
-      // ... add underwriting criteria
-    },
-  },
-};
+    criteria: section.items.reduce((items, item) => {
+      items[item.id] = {
+        score: 0,
+        max: item.max,
+        checked: false
+      };
+      return items;
+    }, {})
+  };
+  return acc;
+}, {});
 
 function CallGrading() {
   const { currentUser, userRole } = useAuth();
@@ -445,42 +415,31 @@ function CallGrading() {
     fetchAgentGrades();
   }, [currentUser?.uid, userRole]);
 
-  // Update the section toggle handler to only affect one section
-  const handleSectionToggle = (section) => (event) => {
-    setActiveSections((prev) => ({
-      ...prev,
-      [section]: event.target.checked, // Only update the specific section
+  // Update handleSectionToggle
+  const handleSectionToggle = (sectionName) => (event) => {
+    setGradeData((prevData) => ({
+      ...prevData,
+      [sectionName]: {
+        ...prevData[sectionName],
+        includeInGrading: event.target.checked,
+      }
     }));
-
-    // If the section is being deactivated, reset its checkboxes
-    if (!event.target.checked) {
-      setGradeData((prev) => ({
-        ...prev,
-        [section]: {
-          ...initialSections[section], // Reset to initial state
-          completed: false,
-        },
-      }));
-    }
   };
 
-  // Update handleCheckboxChange to be more specific
-  const handleCheckboxChange = (section, itemId) => (event) => {
-    // Only activate this specific section if a checkbox within it is checked
-    if (!activeSections[section] && event.target.checked) {
-      setActiveSections((prev) => ({
-        ...prev,
-        [section]: true,
-      }));
-    }
-
-    setGradeData((prev) => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [itemId]: event.target.checked,
-        completed: true,
-      },
+  // Update handleCheckboxChange
+  const handleCheckboxChange = (sectionName, itemId) => (event) => {
+    setGradeData((prevData) => ({
+      ...prevData,
+      [sectionName]: {
+        ...prevData[sectionName],
+        criteria: {
+          ...prevData[sectionName].criteria,
+          [itemId]: {
+            ...prevData[sectionName].criteria[itemId],
+            checked: event.target.checked
+          }
+        }
+      }
     }));
   };
 
@@ -509,26 +468,20 @@ function CallGrading() {
     }));
   };
 
-  // Update the calculateSectionScore function with null checks
+  // Update the calculateSectionScore function
   const calculateSectionScore = (sectionName) => {
-    const section = sections.find((s) => s.id === sectionName);
+    const sectionState = gradeData[sectionName];
+    if (!sectionState || !sectionState.includeInGrading) return 0;
 
-    // Return 0 if section doesn't exist or isn't included in grading
-    if (!section || !section.includeInGrading) {
-      return 0;
-    }
-
-    // Return 0 if no criteria exists
-    if (!section.criteria || Object.keys(section.criteria).length === 0) {
-      return 0;
-    }
-
-    const totalPoints = Object.values(section.criteria).reduce(
-      (sum, item) => sum + (item?.max || 0),
-      0
+    const sectionData = sections.find(s => 
+      s.title.toLowerCase().startsWith(sectionName.toLowerCase())
     );
-    const earnedPoints = Object.values(section.criteria).reduce((sum, item) => {
-      return sum + ((item?.score || 0) / 100) * (item?.max || 0);
+    if (!sectionData) return 0;
+
+    const totalPoints = sectionData.items.reduce((sum, item) => sum + item.max, 0);
+    const earnedPoints = sectionData.items.reduce((sum, item) => {
+      const criteria = sectionState.criteria[item.id];
+      return sum + (criteria?.checked ? item.max : 0);
     }, 0);
 
     return totalPoints > 0 ? (earnedPoints / totalPoints) * 100 : 0;
@@ -1043,34 +996,40 @@ function CallGrading() {
     </Box>
   );
 
-  // Keep your existing renderSection function
+  // Fix the renderSection function
   const renderSection = (sectionName, title) => {
-    const section = sections[sectionName];
-    if (!section) return null;
+    const sectionData = sections.find(s => 
+      s.title.toLowerCase().startsWith(sectionName.toLowerCase())
+    );
+    
+    if (!sectionData) return null;
+
+    const sectionState = gradeData[sectionName] || initialSections[sectionName];
+    const sectionScore = calculateSectionScore(sectionName);
 
     return (
       <Paper sx={{ p: 2, mb: 2 }} key={sectionName}>
         <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
           <Typography variant="h6" color="primary">
-            {title}
+            {sectionData.title}
           </Typography>
           <Typography
             sx={{
-              bgcolor: section.includeInGrading ? "primary.main" : "grey.400",
+              bgcolor: sectionState.includeInGrading ? "primary.main" : "grey.400",
               color: "white",
               px: 1,
               py: 0.5,
               borderRadius: 1,
             }}
           >
-            {calculateSectionScore(sectionName).toFixed(1)}%
+            {sectionScore.toFixed(1)}%
           </Typography>
         </Box>
 
         <FormControlLabel
           control={
             <Checkbox
-              checked={section.includeInGrading}
+              checked={sectionState.includeInGrading}
               onChange={handleSectionToggle(sectionName)}
             />
           }
@@ -1078,17 +1037,17 @@ function CallGrading() {
           sx={{ mb: 2 }}
         />
 
-        {Object.entries(section.criteria || {}).map(([criteriaId, data]) => (
+        {sectionData.items.map((item) => (
           <FormControlLabel
-            key={`${sectionName}-${criteriaId}`}
+            key={`${sectionName}-${item.id}`}
             control={
               <Checkbox
-                checked={data.checked}
-                onChange={handleCheckboxChange(sectionName, criteriaId)}
-                disabled={!section.includeInGrading}
+                checked={sectionState.criteria[item.id]?.checked || false}
+                onChange={handleCheckboxChange(sectionName, item.id)}
+                disabled={!sectionState.includeInGrading}
               />
             }
-            label={`${criteriaId} (${data.points} points)`}
+            label={`${item.name} (${item.max} points)`}
             sx={{ display: "block", mb: 1 }}
           />
         ))}

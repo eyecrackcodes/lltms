@@ -23,6 +23,7 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
 } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 // Add a simple cache at the top of the file
 let agentsCache = {
@@ -42,6 +43,12 @@ export const checkAuthStatus = () => {
     console.log("No user is signed in");
   }
 };
+
+// Add this at the top of the file with other imports
+const SUPER_ADMINS = [
+  'anthony@luminarylife.com',
+  // Add other super admin emails if needed
+];
 
 // Agents Collection
 export const addAgent = async (coachId, agentData) => {
@@ -558,18 +565,61 @@ export const getUserProfile = async (userId) => {
   }
 };
 
-// Add these functions to your existing firebaseUtils.js
+// Update the isSuperAdmin function
+export const isSuperAdmin = async (email) => {
+  return SUPER_ADMINS.includes(email);
+};
 
+// Update the getUserRole function
 export const getUserRole = async (uid) => {
+  if (!uid) return null;
+  
   try {
-    const userDoc = await getDoc(doc(db, "users", uid));
+    const db = getFirestore();
+    const userDoc = await getDoc(doc(db, 'users', uid));
+    
     if (userDoc.exists()) {
-      return userDoc.data().role?.toLowerCase();
+      const userData = userDoc.data();
+      // Check for superadmin first
+      if (SUPER_ADMINS.includes(userData.email)) {
+        return 'superadmin';
+      }
+      return userData.role;
     }
     return null;
   } catch (error) {
-    console.error("Error getting user role:", error);
+    console.error('Error getting user role:', error);
     return null;
+  }
+};
+
+// Add a helper function for role checking
+export const checkUserAccess = async (uid, email) => {
+  try {
+    // Check super admin first
+    if (SUPER_ADMINS.includes(email)) {
+      return {
+        isSuperAdmin: true,
+        role: 'superadmin',
+        hasAccess: true
+      };
+    }
+
+    // Get user role from database
+    const role = await getUserRole(uid);
+    
+    return {
+      isSuperAdmin: false,
+      role: role,
+      hasAccess: ['director', 'sales_manager', 'superadmin'].includes(role)
+    };
+  } catch (error) {
+    console.error('Error checking user access:', error);
+    return {
+      isSuperAdmin: false,
+      role: null,
+      hasAccess: false
+    };
   }
 };
 
@@ -910,13 +960,6 @@ const calculateNewAverage = (newScore) => {
     value: parseFloat(newScore),
     lastUpdated: serverTimestamp(),
   };
-};
-
-export const isSuperAdmin = (email) => {
-  console.log("Checking super admin for email:", email);
-  const isAdmin = email === "anthony@luminarylife.com";
-  console.log("Is super admin result:", isAdmin);
-  return isAdmin;
 };
 
 export const assignTrainingModule = async (moduleId, selectedAgents) => {

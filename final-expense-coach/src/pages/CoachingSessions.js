@@ -24,12 +24,15 @@ import {
   IconButton,
   Chip,
   Stack,
+  TablePagination,
 } from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from "@mui/icons-material";
+import { getFirestore, collection, query, where, orderBy, limit, startAfter, getDocs } from 'firebase/firestore';
+import { useAuth } from '../contexts/AuthContext';
 
 // Mock data
 const mockAgents = [
@@ -46,6 +49,7 @@ const sessionTypes = [
 ];
 
 function CoachingSessions() {
+  const { currentUser } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [users, setUsers] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
@@ -65,6 +69,12 @@ function CoachingSessions() {
   const [editingSession, setEditingSession] = useState(null);
   const [formErrors, setFormErrors] = useState({});
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [filterAgent, setFilterAgent] = useState('');
+  const [agents, setAgents] = useState([]);
+  const [selectedSession, setSelectedSession] = useState(null);
 
   useEffect(() => {
     // Load users and sessions from localStorage
@@ -74,6 +84,57 @@ function CoachingSessions() {
     if (savedUsers) setUsers(JSON.parse(savedUsers));
     if (savedSessions) setSessions(JSON.parse(savedSessions));
   }, []);
+
+  useEffect(() => {
+    const fetchAgents = async () => {
+      const db = getFirestore();
+      const agentsSnapshot = await getDocs(collection(db, 'users'));
+      const agentsData = agentsSnapshot.docs
+        .filter(doc => doc.data().role === 'agent')
+        .map(doc => ({
+          id: doc.id,
+          name: `${doc.data().firstName} ${doc.data().lastName}`
+        }));
+      setAgents(agentsData);
+    };
+
+    fetchAgents();
+  }, []);
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const db = getFirestore();
+        let sessionsQuery = query(
+          collection(db, 'coachingSessions'),
+          orderBy('date', 'desc'),
+          limit(rowsPerPage)
+        );
+
+        if (filterAgent) {
+          sessionsQuery = query(
+            sessionsQuery,
+            where('agentId', '==', filterAgent)
+          );
+        }
+
+        const snapshot = await getDocs(sessionsQuery);
+        const sessionsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          date: doc.data().date?.toDate()
+        }));
+
+        setSessions(sessionsData);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching sessions:', error);
+        setLoading(false);
+      }
+    };
+
+    fetchSessions();
+  }, [filterAgent, rowsPerPage, page]);
 
   const getManagerAgents = (managerId) => {
     return users.filter((user) => user.managerId === managerId);
@@ -165,6 +226,19 @@ function CoachingSessions() {
 
   const getStatusColor = (status) => {
     return status === "Completed" ? "success" : "warning";
+  };
+
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const handleViewSession = (session) => {
+    setSelectedSession(session);
   };
 
   return (
@@ -344,6 +418,110 @@ function CoachingSessions() {
             {editingSession ? "Update" : "Schedule"}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      <Box sx={{ mt: 3, p: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          Coaching Sessions
+        </Typography>
+
+        <Box sx={{ mb: 3 }}>
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel>Filter by Agent</InputLabel>
+            <Select
+              value={filterAgent}
+              onChange={(e) => setFilterAgent(e.target.value)}
+              label="Filter by Agent"
+            >
+              <MenuItem value="">All Agents</MenuItem>
+              {agents.map((agent) => (
+                <MenuItem key={agent.id} value={agent.id}>
+                  {agent.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Date</TableCell>
+                <TableCell>Agent</TableCell>
+                <TableCell>Focus Area</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {sessions.map((session) => (
+                <TableRow key={session.id}>
+                  <TableCell>{session.date?.toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    {agents.find(a => a.id === session.agentId)?.name}
+                  </TableCell>
+                  <TableCell>{session.development?.focusArea}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => handleViewSession(session)}
+                    >
+                      View Details
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <TablePagination
+            rowsPerPageOptions={[5, 10, 25]}
+            component="div"
+            count={-1}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
+        </TableContainer>
+      </Box>
+
+      <Dialog
+        open={!!selectedSession}
+        onClose={() => setSelectedSession(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Coaching Session Details - {selectedSession?.date?.toLocaleDateString()}
+        </DialogTitle>
+        <DialogContent>
+          {selectedSession && (
+            <Box sx={{ p: 2 }}>
+              {/* Session details */}
+              <Typography variant="h6" gutterBottom>
+                Focus Area
+              </Typography>
+              <Typography paragraph>
+                {selectedSession.development?.focusArea}
+              </Typography>
+
+              <Typography variant="h6" gutterBottom>
+                Action Plan
+              </Typography>
+              <Typography paragraph>
+                {selectedSession.development?.actionPlan}
+              </Typography>
+
+              <Typography variant="h6" gutterBottom>
+                Success Metrics
+              </Typography>
+              <Typography paragraph>
+                {selectedSession.development?.successMetrics}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
       </Dialog>
     </Box>
   );

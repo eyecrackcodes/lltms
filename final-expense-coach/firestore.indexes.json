@@ -16,6 +16,15 @@
         { "fieldPath": "managerId", "order": "ASCENDING" },
         { "fieldPath": "firstName", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "managerId", "order": "ASCENDING" },
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "firstName", "order": "ASCENDING" }
+      ]
     }
   ]
 } 

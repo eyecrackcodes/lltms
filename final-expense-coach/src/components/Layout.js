@@ -26,7 +26,7 @@ import {
   LibraryBooks as LibraryIcon,
   Assignment as AssignmentIcon,
 } from "@mui/icons-material";
-import { isSuperAdmin, getUserRole } from "../firebase/firebaseUtils";
+import { isSuperAdmin, getUserRole, checkUserAccess } from "../firebase/firebaseUtils";
 import PeopleIcon from "@mui/icons-material/People";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import StarIcon from "@mui/icons-material/Star";
@@ -51,14 +51,16 @@ function Layout() {
   useEffect(() => {
     const checkAdminStatus = async () => {
       if (currentUser?.email) {
-        const superAdminStatus = await isSuperAdmin(currentUser.email);
-        const role = await getUserRole(currentUser.uid);
-        console.log("User role:", role); // Debug log
-        console.log("Super admin status:", superAdminStatus); // Debug log
-        setIsAdmin(
-          superAdminStatus || role === "director" || role === "manager"
-        );
-        setUserRole(role);
+        try {
+          const accessInfo = await checkUserAccess(currentUser.uid, currentUser.email);
+          console.log("User access info:", accessInfo); // Debug log
+          
+          setIsAdmin(accessInfo.hasAccess);
+          setUserRole(accessInfo.role);
+          
+        } catch (error) {
+          console.error("Error checking admin status:", error);
+        }
       }
     };
     checkAdminStatus();

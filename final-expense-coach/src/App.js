@@ -27,6 +27,10 @@ import TrainingManagement from "./pages/training/TrainingManagement";
 import AssignmentManager from "./pages/training/AssignmentManager";
 import ModuleManagement from "./pages/admin/ModuleManagement";
 import ProtectedRoute from "./components/ProtectedRoute";
+import CoachingSession from './pages/CoachingSession';
+import CoachingFeedback from './pages/CoachingFeedback';
+import CoachingHistory from './pages/CoachingHistory';
+import MyCoachingSessions from './pages/MyCoachingSessions';
 
 const theme = createTheme({
   palette: {
@@ -143,6 +147,42 @@ function App() {
                   <Route
                     path="*"
                     element={<Navigate to="/dashboard" replace />}
+                  />
+
+                  <Route
+                    path="/coaching-session"
+                    element={
+                      <ProtectedRoute allowedRoles={["admin", "sales_manager", "director"]}>
+                        <CoachingSession />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/my-coaching"
+                    element={
+                      <ProtectedRoute allowedRoles={["agent"]}>
+                        <CoachingFeedback />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/coaching-history"
+                    element={
+                      <ProtectedRoute allowedRoles={["admin", "sales_manager", "director"]}>
+                        <CoachingHistory />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/my-coaching-sessions"
+                    element={
+                      <ProtectedRoute allowedRoles={["agent"]}>
+                        <MyCoachingSessions />
+                      </ProtectedRoute>
+                    }
                   />
                 </Route>
               </Route>
