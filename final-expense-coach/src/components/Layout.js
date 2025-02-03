@@ -12,6 +12,7 @@ import {
   Divider,
   Collapse,
   ListItemButton,
+  ListSubheader,
 } from "@mui/material";
 import {
   Dashboard as DashboardIcon,
@@ -32,6 +33,11 @@ import StarIcon from "@mui/icons-material/Star";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
+import FeedbackIcon from '@mui/icons-material/Feedback';
+import HistoryIcon from '@mui/icons-material/History';
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import TimelineIcon from '@mui/icons-material/Timeline';
 
 const drawerWidth = 240;
 
@@ -77,12 +83,39 @@ function Layout() {
     { text: "Schedule", icon: <ScheduleIcon />, path: "/schedule" },
     { text: "Performance", icon: <AssessmentIcon />, path: "/performance" },
     { text: "Call Grading", icon: <GradeIcon />, path: "/call-grading" },
+    
+    // Coaching section for agents
+    ...(userRole === 'agent' ? [
+      { text: "My Coaching", icon: <FeedbackIcon />, path: "/my-coaching-sessions" }
+    ] : [
+      // Coaching section header for managers/admins
+      { 
+        type: 'subheader',
+        text: "Coaching Management"
+      },
+      { 
+        text: "New Coaching Session", 
+        icon: <AssignmentIndIcon />, 
+        path: "/coaching-session" 
+      },
+      { 
+        text: "Coaching History", 
+        icon: <HistoryIcon />, 
+        path: "/coaching-history" 
+      },
+      {
+        text: "Coaching Analytics",
+        icon: <TimelineIcon />,
+        path: "/coaching-analytics"
+      }
+    ]),
     { text: "Profile", icon: <PersonIcon />, path: "/profile" },
   ];
 
   const adminMenuItems = [
     { text: "User Management", icon: <GroupIcon />, path: "/user-management" },
     { text: "All Agents", icon: <GroupIcon />, path: "/all-agents" },
+    { text: "Coaching Sessions", icon: <SupervisorAccountIcon />, path: "/coaching-session" },
   ];
 
   const trainingManagementItems = [
@@ -122,19 +155,25 @@ function Layout() {
           <List>
             {/* Base Menu Items */}
             {baseMenuItems.map((item) => (
-              <ListItem
-                key={item.text}
-                component={Link}
-                to={item.path}
-                sx={{
-                  "&:hover": {
-                    bgcolor: "action.hover",
-                  },
-                }}
-              >
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
-              </ListItem>
+              item.type === 'subheader' ? (
+                <ListSubheader key={item.text} sx={{ bgcolor: 'background.paper' }}>
+                  {item.text}
+                </ListSubheader>
+              ) : (
+                <ListItem
+                  key={item.text}
+                  component={Link}
+                  to={item.path}
+                  sx={{
+                    "&:hover": {
+                      bgcolor: "action.hover",
+                    },
+                  }}
+                >
+                  <ListItemIcon>{item.icon}</ListItemIcon>
+                  <ListItemText primary={item.text} />
+                </ListItem>
+              )
             ))}
 
             {/* Admin Section */}

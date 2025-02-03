@@ -1,0 +1,159 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isSuperAdmin() {
+      return request.auth.token.email == 'anthony@luminarylife.com';
+    }
+    
+    function isDirector() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director';
+    }
+    
+    function isManager() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'sales_manager';
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || isDirector() || isManager();
+    }
+
+    function isAgent() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'agent';
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        (userId == request.auth.uid && 
+         request.resource.data.role == 'agent')
+      );
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        userId == request.auth.uid
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // Training Modules Collection
+    match /trainingModules/{moduleId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Module Assignments Collection
+    match /moduleAssignments/{assignmentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.agentId
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Call Grades Collection
+    match /callGrades/{gradeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isAdmin();
+      allow update, delete: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.graderId == request.auth.uid
+      );
+    }
+
+    // Metrics Collection
+    match /metrics/{metricId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    // Agents Collection
+    match /agents/{agentId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (
+        isAdmin() ||
+        (isManager() && resource.data.location == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.location)
+      );
+    }
+
+    // Coaching Sessions Collection
+    match /coachingSessions/{sessionId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid == resource.data.managerId ||
+        request.auth.uid == resource.data.agentId
+      );
+      
+      allow create: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid == request.resource.data.managerId
+      );
+      
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid == resource.data.managerId
+      );
+      
+      allow delete: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid == resource.data.managerId
+      );
+    }
+
+    // Calendar Events Collection
+    match /calendarEvents/{eventId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid in resource.data.attendees[].id
+      );
+      
+      allow create: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid == request.resource.data.managerId
+      );
+      
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid == resource.data.managerId
+      );
+      
+      allow delete: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid == resource.data.managerId
+      );
+    }
+
+    // Legacy Collections (maintained for backwards compatibility)
+    match /training_assignments/{assignmentId} {
+      allow read: if isSignedIn();
+      allow write, delete: if isSuperAdmin();
+    }
+
+    match /trainings/{trainingId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (
+        isSuperAdmin() ||
+        isDirector()
+      );
+    }
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 
